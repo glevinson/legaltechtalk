@@ -27,8 +27,9 @@ RUN poetry install --only=main --no-root && rm -rf $POETRY_CACHE_DIR
 # Install additional dependencies for the API
 RUN poetry add fastapi "uvicorn[standard]"
 
-# Copy source code
+# Copy source code and README.md
 COPY src/ ./src/
+COPY README.md ./
 
 # Install the current project (hackathon package)
 RUN poetry install --only-root

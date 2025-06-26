@@ -30,6 +30,9 @@ RUN poetry add fastapi "uvicorn[standard]"
 # Copy source code
 COPY src/ ./src/
 
+# Install the current project (hackathon package)
+RUN poetry install --only-root
+
 # Expose port
 EXPOSE 8000
 

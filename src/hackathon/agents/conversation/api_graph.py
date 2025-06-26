@@ -100,19 +100,20 @@ def should_api_continue(
 class APIMultiAgentGraph:
     """API-specific multi-agent graph for legal client onboarding."""
 
-    def __init__(self, llm: BaseLanguageModel, use_memory: bool = True):
+    def __init__(self, llm: BaseLanguageModel, use_memory: bool = True, system_prompt: str = None):
         """
         Initialize the API-specific multi-agent workflow graph.
 
         Args:
             llm: The language model to use for the conversation agent
             use_memory: Whether to use memory for conversation continuity
+            system_prompt: Custom system prompt for the conversation agent
         """
         self.llm = llm
         self.use_memory = use_memory
 
-        # Create the conversation agent
-        self.conversation_agent = ConversationAgent(llm, use_memory=use_memory)
+        # Create the conversation agent with optional system prompt
+        self.conversation_agent = ConversationAgent(llm, use_memory=use_memory, system_prompt=system_prompt)
 
         # Build the graph
         self.graph = self._build_graph()

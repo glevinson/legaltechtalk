@@ -115,8 +115,13 @@ const data = await response.json();
 
 ### 3. Monitor Conversation State
 - `conversation_complete`: Whether Iris has gathered enough information
+- `conversation_ended`: **True only when `end_conversation` tool was called in this response**
 - `legal_area`: The classified legal area (e.g., "mergers_and_acquisitions")
 - `draft_ready`: Whether the pitch deck has been generated
+
+**Key Difference:**
+- `conversation_ended: true` = Iris just called `end_conversation` in this specific response
+- `conversation_complete: true` = The overall conversation workflow is finished
 
 ## 🛠️ How It Works
 

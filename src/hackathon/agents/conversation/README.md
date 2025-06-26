@@ -141,8 +141,14 @@ Response:
 **Key Response Fields:**
 - `message`: Iris's response to display in your UI
 - `conversation_complete`: Whether Iris has gathered enough information
+- `conversation_ended`: **True only when `end_conversation` tool was called in this response**
 - `legal_area`: The classified legal area (may be null initially)
 - `draft_ready`: Whether the pitch deck has been generated
+
+**Important Distinction:**
+- `conversation_ended: true` means Iris just called `end_conversation` in this specific turn
+- `conversation_complete: true` means the overall workflow reached completion
+- Use `conversation_ended` to detect when Iris is handing off to the drafting team
 
 **Frontend Implementation:**
 ```javascript

@@ -2,7 +2,7 @@
 
 import os
 import uuid
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -16,6 +16,7 @@ from hackathon.agents.conversation.api_graph import APIMultiAgentGraph
 class ConversationStartRequest(BaseModel):
     """Request to start a new conversation."""
     thread_id: Optional[str] = Field(default=None, description="Optional thread ID. If not provided, one will be generated.")
+    system_prompt: Optional[str] = Field(default=None, description="Optional custom system prompt for the conversation. If not provided, default will be used.")
 
 
 class ConversationStartResponse(BaseModel):
@@ -36,9 +37,11 @@ class ConversationMessageResponse(BaseModel):
     thread_id: str
     message: str
     conversation_complete: bool = False
+    conversation_ended: bool = False  # True when end_conversation tool was called
     legal_area: Optional[str] = None
     status: str = "active"
     draft_ready: bool = False
+    conversation_history: Optional[List[Dict[str, Any]]] = None  # Full conversation history when conversation ends
 
 
 class ConversationStatusRequest(BaseModel):
@@ -72,9 +75,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global workflow instance (in production, use proper dependency injection)
+# Global LLM instance (in production, use proper dependency injection)
 llm = None
-workflow = None
 
 # In-memory storage for conversation states (in production, use Redis or database)
 conversation_states: Dict[str, Dict[str, Any]] = {}
@@ -82,16 +84,15 @@ conversation_states: Dict[str, Dict[str, Any]] = {}
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize the workflow on startup."""
-    global llm, workflow
+    """Initialize the LLM on startup."""
+    global llm
     
     # Check for API key
     if not os.getenv("OPENAI_API_KEY"):
         raise ValueError("OPENAI_API_KEY environment variable not set")
     
-    # Initialize LLM and workflow
+    # Initialize LLM
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
-    workflow = APIMultiAgentGraph(llm=llm, use_memory=True)
     
     print("✅ Legal Conversation API initialized")
 
@@ -113,6 +114,9 @@ async def start_conversation(request: ConversationStartRequest):
     thread_id = request.thread_id or f"conv_{uuid.uuid4()}"
     
     try:
+        # Create workflow with custom system prompt if provided
+        workflow = APIMultiAgentGraph(llm=llm, use_memory=True, system_prompt=request.system_prompt)
+        
         # Start conversation with Iris's introduction
         initial_state = workflow.start_conversation(thread_id=thread_id)
         
@@ -123,11 +127,12 @@ async def start_conversation(request: ConversationStartRequest):
         else:
             iris_message = "Hello! I'm Iris, the AI front-of-house for our law firm. How can I help you today?"
         
-        # Store conversation state
+        # Store conversation state and workflow instance
         conversation_states[thread_id] = {
             "status": "active",
             "message_count": len(messages),
-            "last_state": initial_state
+            "last_state": initial_state,
+            "workflow": workflow
         }
         
         return ConversationStartResponse(
@@ -158,8 +163,12 @@ async def send_message(request: ConversationMessageRequest):
         raise HTTPException(status_code=400, detail="Conversation has already ended")
     
     try:
-        # Get existing state
+        # Get existing state and workflow
         existing_state = conversation_states[thread_id].get("last_state", {})
+        workflow = conversation_states[thread_id].get("workflow")
+        
+        if not workflow:
+            raise HTTPException(status_code=500, detail="Workflow not found for conversation")
         
         # Process the message
         result = workflow.process_message(
@@ -178,9 +187,27 @@ async def send_message(request: ConversationMessageRequest):
                 iris_message = msg.content
                 break
         
-        # Check if conversation is complete
+        # Check if conversation is complete and if end_conversation was called
         conversation_complete = result.get("conversation_complete", False)
         drafting_complete = result.get("drafting_complete", False)
+        
+        # Check specifically if end_conversation tool was called in this turn
+        conversation_ended = False
+        classified_legal_area = None
+        
+        for msg in reversed(messages):
+            if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                for tool_call in msg.tool_calls:
+                    if tool_call.get('name') == 'end_conversation':
+                        conversation_ended = True
+                    elif tool_call.get('name') == 'classify_legal_area':
+                        # Extract legal area from tool call arguments
+                        args = tool_call.get('args', {})
+                        if 'legal_area' in args:
+                            classified_legal_area = args['legal_area']
+                
+                if conversation_ended:
+                    break
         
         # Update conversation state
         conversation_states[thread_id].update({
@@ -191,13 +218,28 @@ async def send_message(request: ConversationMessageRequest):
             "draft_ready": drafting_complete
         })
         
+        # Prepare conversation history if conversation ended
+        conversation_history = None
+        if conversation_ended:
+            history = []
+            for msg in messages:
+                if hasattr(msg, 'type') and hasattr(msg, 'content'):
+                    history.append({
+                        "role": msg.type,
+                        "content": msg.content,
+                        "timestamp": getattr(msg, 'timestamp', None)
+                    })
+            conversation_history = history
+        
         return ConversationMessageResponse(
             thread_id=thread_id,
             message=iris_message,
             conversation_complete=conversation_complete,
-            legal_area=result.get("legal_area"),
+            conversation_ended=conversation_ended,
+            legal_area=classified_legal_area or result.get("legal_area"),
             status=conversation_states[thread_id]["status"],
-            draft_ready=drafting_complete
+            draft_ready=drafting_complete,
+            conversation_history=conversation_history
         )
         
     except Exception as e:

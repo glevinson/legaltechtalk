@@ -41,12 +41,13 @@ Remember: Your goal is efficiency - gather enough information for the legal team
 class ConversationAgent(ReActAgent):
     """Specialized ReAct agent for legal client onboarding conversations."""
 
-    def __init__(self, llm: BaseLanguageModel, use_memory: bool = True, **kwargs):
+    def __init__(self, llm: BaseLanguageModel, use_memory: bool = True, system_prompt: str = None, **kwargs):
         """Initialize the legal conversation agent.
 
         Args:
             llm: The language model to use
             use_memory: Whether to use memory for conversation continuity
+            system_prompt: Custom system prompt to use. If None, uses default legal conversation prompt
             **kwargs: Additional arguments for the base ReActAgent
         """
         # Define the tools for this agent
@@ -56,9 +57,12 @@ class ConversationAgent(ReActAgent):
             end_conversation,
         ]
 
-        # Initialize with legal-specific system prompt
+        # Use custom system prompt if provided, otherwise use default
+        prompt_to_use = system_prompt if system_prompt is not None else LEGAL_CONVERSATION_PROMPT
+
+        # Initialize with system prompt
         super().__init__(
-            llm=llm, tools=tools, system_prompt=LEGAL_CONVERSATION_PROMPT, **kwargs
+            llm=llm, tools=tools, system_prompt=prompt_to_use, **kwargs
         )
 
         # Set up memory if requested

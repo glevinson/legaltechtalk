@@ -76,60 +76,205 @@ result = workflow.run(
 
 ## 📡 API Endpoints
 
-### Start Conversation
+### Important: No CLI Prompts!
+The API has been specifically designed to handle conversations without any CLI interaction. Each request returns Iris's response that can be displayed directly in your frontend.
+
+### 1. Start Conversation
+Start a new conversation with Iris. She will introduce herself and ask about legal needs.
+
 ```http
 POST /conversation/start
 Content-Type: application/json
 
 {
-  "thread_id": "optional_custom_id"
+  "thread_id": "optional_custom_id"  // Optional - will generate if not provided
 }
 ```
 
 Response:
 ```json
 {
-  "thread_id": "conv_123",
-  "message": "Hello! I'm Iris, the AI front-of-house...",
+  "thread_id": "conv_7b7d9fb3-7439-4d21-99c0-b975b4ec7f4e",
+  "message": "Hello! I'm Iris, the AI front-of-house for our law firm. My role is to understand your legal needs and get you in front of the right person as quickly as possible. Could you please tell me about the legal challenges you're facing?",
   "status": "active"
 }
 ```
 
-### Send Message
+**Frontend Implementation:**
+```javascript
+// Start new conversation
+const response = await fetch('http://localhost:8000/conversation/start', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({})
+});
+const data = await response.json();
+// Display data.message in your chat UI
+// Store data.thread_id for subsequent messages
+```
+
+### 2. Send Message
+Send a user message and receive Iris's response. The conversation state is maintained server-side.
+
 ```http
 POST /conversation/message
 Content-Type: application/json
 
 {
-  "thread_id": "conv_123",
-  "message": "I need help with a merger"
+  "thread_id": "conv_7b7d9fb3-7439-4d21-99c0-b975b4ec7f4e",
+  "message": "I need help with acquiring another company"
 }
 ```
 
 Response:
 ```json
 {
-  "thread_id": "conv_123",
-  "message": "I understand you need help with a merger...",
+  "thread_id": "conv_7b7d9fb3-7439-4d21-99c0-b975b4ec7f4e",
+  "message": "Thank you for sharing that! To better assist you with the acquisition, I have a few targeted questions:\n\n1. What type of transaction is this?...",
   "conversation_complete": false,
   "legal_area": "mergers_and_acquisitions",
-  "status": "active"
+  "status": "active",
+  "draft_ready": false
 }
 ```
 
-### Get Status
+**Key Response Fields:**
+- `message`: Iris's response to display in your UI
+- `conversation_complete`: Whether Iris has gathered enough information
+- `legal_area`: The classified legal area (may be null initially)
+- `draft_ready`: Whether the pitch deck has been generated
+
+**Frontend Implementation:**
+```javascript
+// Send message
+const response = await fetch('http://localhost:8000/conversation/message', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    thread_id: currentThreadId,
+    message: userInput
+  })
+});
+const data = await response.json();
+// Display data.message in chat UI
+// Check if data.conversation_complete to show status
+```
+
+### 3. Get Conversation Status
+Check the current status without sending a new message.
+
 ```http
 POST /conversation/status
 Content-Type: application/json
 
 {
-  "thread_id": "conv_123"
+  "thread_id": "conv_7b7d9fb3-7439-4d21-99c0-b975b4ec7f4e"
 }
 ```
 
-### Get History
+Response:
+```json
+{
+  "thread_id": "conv_7b7d9fb3-7439-4d21-99c0-b975b4ec7f4e",
+  "status": "active",
+  "conversation_complete": false,
+  "legal_area": "mergers_and_acquisitions",
+  "message_count": 7,
+  "draft_ready": false
+}
+```
+
+### 4. Get Conversation History
+Retrieve the full conversation history for display or review.
+
 ```http
 GET /conversation/{thread_id}/history
+```
+
+Response:
+```json
+{
+  "thread_id": "conv_7b7d9fb3-7439-4d21-99c0-b975b4ec7f4e",
+  "history": [
+    {
+      "role": "ai",
+      "content": "Hello! I'm Iris, the AI front-of-house...",
+      "timestamp": null
+    },
+    {
+      "role": "human", 
+      "content": "I need help with an acquisition",
+      "timestamp": null
+    },
+    {
+      "role": "ai",
+      "content": "Thank you for sharing that...",
+      "timestamp": null
+    }
+  ],
+  "message_count": 7,
+  "status": "active"
+}
+```
+
+### Typical Frontend Flow
+
+```javascript
+// 1. Start conversation when user opens chat
+const startChat = async () => {
+  const res = await fetch('/conversation/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  });
+  const data = await res.json();
+  setThreadId(data.thread_id);
+  addMessage('ai', data.message);
+};
+
+// 2. Send messages as user types
+const sendMessage = async (userMessage) => {
+  addMessage('human', userMessage);
+  
+  const res = await fetch('/conversation/message', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      thread_id: threadId,
+      message: userMessage
+    })
+  });
+  const data = await res.json();
+  
+  addMessage('ai', data.message);
+  
+  if (data.conversation_complete) {
+    showCompletionStatus('Conversation complete! Drafting pitch deck...');
+  }
+};
+
+// 3. Handle conversation completion
+const checkIfComplete = (data) => {
+  if (data.conversation_complete && data.draft_ready) {
+    showNotification('Your pitch deck is ready!');
+  }
+};
+```
+
+### Error Handling
+
+All endpoints return appropriate HTTP status codes:
+- `200 OK`: Successful request
+- `404 Not Found`: Thread ID not found
+- `400 Bad Request`: Invalid request (e.g., conversation already ended)
+- `422 Unprocessable Entity`: Missing required fields
+- `500 Internal Server Error`: Server error
+
+Error response format:
+```json
+{
+  "detail": "Error message describing what went wrong"
+}
 ```
 
 ## 🛠️ How It Works

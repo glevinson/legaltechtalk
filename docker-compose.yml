@@ -1,0 +1,30 @@
+services:
+  legal-conversation-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGCHAIN_VERBOSE=false
+    volumes:
+      # Mount source code for development (optional)
+      - ./src:/app/src:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Optional: Add a simple frontend for testing
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/index.html:/usr/share/nginx/html/index.html:ro
+    depends_on:
+      - legal-conversation-api
+    restart: unless-stopped

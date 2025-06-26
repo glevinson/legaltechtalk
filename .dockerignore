@@ -1,0 +1,54 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache
+*.egg-info
+dist
+build
+
+# Virtual environments
+.venv
+.env
+env
+venv
+
+# IDEs
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs
+
+# Data and models
+data/
+vector_store/
+*.pkl
+*.model
+
+# Documentation
+*.md
+docs/
+
+# Development files
+notebooks/
+.env.example
+docker-compose.override.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
